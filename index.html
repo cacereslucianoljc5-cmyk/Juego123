@@ -109,6 +109,7 @@
     transition: transform .08s; }
   .btn:hover { transform: translateY(-2px); }
   .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a6210; }
+  .btn:disabled { filter: grayscale(.6) brightness(.8); cursor: wait; transform: none; }
   .btn.alt { background: linear-gradient(180deg, #6a5f8a, #4a4066); color: #eee;
     box-shadow: 0 4px 0 #2a2440, 0 8px 18px rgba(0,0,0,.5); }
 
@@ -215,8 +216,8 @@
   </div>
 
   <script type="importmap">
-    { "imports": { "three": "./lib/three.module.js?v=2" } }
+    { "imports": { "three": "./lib/three.module.js?v=3" } }
   </script>
-  <script type="module" src="./js/game.js?v=2"></script>
+  <script type="module" src="./js/game.js?v=3"></script>
 </body>
 </html>

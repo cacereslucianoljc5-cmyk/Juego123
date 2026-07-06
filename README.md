@@ -1,8 +1,10 @@
 # ⚔️ Mazmorra NPC — juego estilo Isaac en 3D
 
 Juego de acción por oleadas inspirado en *The Binding of Isaac*, hecho con
-**Three.js** (sin build, sitio estático). Los personajes están modelados en 3D
-proceduralmente, inspirados en las figuras NPC estilo Clash:
+**Three.js** (sin build, sitio estático). Los enemigos y la arena usan los
+modelos GLB del repo [clash3deee](https://github.com/cacereslucianoljc5-cmyk/clash3deee)
+(optimizados de ~100 MB a ~3,5 MB con gltf-transform: simplificación de malla,
+texturas WebP y cuantización); el héroe es procedural:
 
 | Personaje | Rol |
 |---|---|
@@ -35,9 +37,10 @@ y abrir <http://localhost:8000> (o el puerto que indique).
 ## Estructura
 
 - `index.html` — HUD, menús (inicio, pausa, cofres, fin de juego) y estilos
-- `js/characters.js` — modelos 3D procedurales (héroe, esqueleto, bárbaro, arquero, gigante, cofres…)
-- `js/game.js` — bucle del juego: oleadas, IA, combate, jefes, cofres, puntaje
-- `lib/three.module.js` — Three.js r160 vendoreado
+- `js/characters.js` — carga de modelos GLB (enemigos + arena) y modelos procedurales (héroe, cofres…)
+- `js/game.js` — bucle del juego: oleadas, IA, combate, jefes, cofres, puntaje, calidad adaptativa
+- `models/*.glb` — Esqueleto, Arquero, Bárbaro, Gigante y Arena (del repo clash3deee, optimizados)
+- `lib/` — Three.js r160 + GLTFLoader vendoreados
 
 ## Despliegue
 

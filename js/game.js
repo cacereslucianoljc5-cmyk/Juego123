@@ -2,11 +2,12 @@
 import * as THREE from 'three';
 import {
   makePlayer, makeSkeleton, makeBarbarian, makeArcher, makeGiant,
-  makeChest, makeArrow, makeHeartPickup,
-} from './characters.js?v=2';
+  makeChest, makeArrow, makeHeartPickup, loadAssets, getArena,
+} from './characters.js?v=3';
 
 // ------------------------------------------------------------------ constantes
-const ROOM = 17;              // mitad del ancho de la sala
+const ROOM = 16;              // mitad del área jugable dentro de la arena
+const ARENA_SCALE = 24;       // escala del modelo Arena.glb
 const PLAYER_SPEED = 6.2;
 const PLAYER_MAX_HP = 6;      // medios corazones
 const ATTACK_RANGE = 2.5;
@@ -84,8 +85,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0812);
-scene.fog = new THREE.Fog(0x0b0812, 26, 46);
+scene.background = new THREE.Color(0x101624);
+scene.fog = new THREE.Fog(0x101624, 40, 85);
 
 const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 12, 8.6);
@@ -103,84 +104,37 @@ const dirLight = new THREE.DirectionalLight(0xfff2dd, 1.6);
 dirLight.position.set(8, 18, 6);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(2048, 2048);
-dirLight.shadow.camera.left = -22; dirLight.shadow.camera.right = 22;
-dirLight.shadow.camera.top = 22; dirLight.shadow.camera.bottom = -22;
+dirLight.shadow.camera.left = -26; dirLight.shadow.camera.right = 26;
+dirLight.shadow.camera.top = 26; dirLight.shadow.camera.bottom = -26;
 scene.add(dirLight);
 
-// ------------------------------------------------------------------ la sala (mapa)
-function stoneTexture(base, line, tiles) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 512;
-  const g = c.getContext('2d');
-  g.fillStyle = base;
-  g.fillRect(0, 0, 512, 512);
-  const t = 512 / tiles;
-  for (let y = 0; y < tiles; y++) {
-    for (let x = 0; x < tiles; x++) {
-      const shade = (Math.sin(x * 12.3 + y * 7.7) * 0.5 + 0.5) * 18;
-      g.fillStyle = `rgba(0,0,0,${(shade / 100).toFixed(2)})`;
-      g.fillRect(x * t + 2, y * t + 2, t - 4, t - 4);
-      g.strokeStyle = line;
-      g.lineWidth = 3;
-      g.strokeRect(x * t + 1.5, y * t + 1.5, t - 3, t - 3);
-    }
+// ------------------------------------------------------------------ la arena (mapa del repo clash3deee)
+const torchLights = [];   // (la arena trae su propia decoración)
+const obstacles = [];     // sin rocas: el campo de la arena queda libre
+
+function setupArena() {
+  const arena = getArena();
+  arena.scale.setScalar(ARENA_SCALE);
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  arena.traverse((o) => {
+    if (o.isMesh && o.material.map) o.material.map.anisotropy = Math.min(4, maxAniso);
+  });
+  scene.add(arena);
+  arena.updateMatrixWorld(true);
+
+  // apoyar el campo de juego en y=0: medir la altura del pasto con un rayo
+  const down = new THREE.Vector3(0, -1, 0);
+  const ray = new THREE.Raycaster();
+  const heights = [];
+  for (const [px, pz] of [[0, ROOM * 0.55], [0, -ROOM * 0.55], [ROOM * 0.4, ROOM * 0.5], [-ROOM * 0.4, -ROOM * 0.5]]) {
+    ray.set(new THREE.Vector3(px, 60, pz), down);
+    const hit = ray.intersectObject(arena, true)[0];
+    if (hit) heights.push(hit.point.y);
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
-}
-
-const floorTex = stoneTexture('#5d5370', '#443b58', 8);
-floorTex.repeat.set(3, 3);
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(ROOM * 2 + 4, ROOM * 2 + 4),
-  new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-scene.add(floor);
-
-const wallTex = stoneTexture('#4c4260', '#332b45', 6);
-wallTex.repeat.set(6, 1);
-const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.95 });
-for (const [x, z, w, d] of [
-  [0, -ROOM - 1, ROOM * 2 + 4, 2], [0, ROOM + 1, ROOM * 2 + 4, 2],
-  [-ROOM - 1, 0, 2, ROOM * 2 + 4], [ROOM + 1, 0, 2, ROOM * 2 + 4],
-]) {
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 3.2, d), wallMat);
-  wall.position.set(x, 1.6, z);
-  wall.castShadow = wall.receiveShadow = true;
-  scene.add(wall);
-}
-
-// antorchas en las esquinas
-const torchLights = [];
-for (const [x, z] of [[-ROOM + 1.4, -ROOM + 1.4], [ROOM - 1.4, -ROOM + 1.4], [-ROOM + 1.4, ROOM - 1.4], [ROOM - 1.4, ROOM - 1.4]]) {
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.8, 8),
-    new THREE.MeshStandardMaterial({ color: 0x5a3c22 }));
-  pole.position.set(x, 0.9, z);
-  pole.castShadow = true;
-  scene.add(pole);
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 8),
-    new THREE.MeshBasicMaterial({ color: 0xffa030 }));
-  flame.position.set(x, 2.0, z);
-  scene.add(flame);
-  const light = new THREE.PointLight(0xff9540, 6, 12, 1.6);
-  light.position.set(x, 2.2, z);
-  scene.add(light);
-  torchLights.push({ light, flame });
-}
-
-// rocas (obstáculos con colisión)
-const obstacles = [];
-const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6274, roughness: 0.9, flatShading: true });
-for (const [x, z, s] of [[-7, -6, 1.1], [7.5, -5, 0.9], [-6.5, 6.5, 0.95], [6, 7, 1.15], [0, -9.5, 0.8], [-10, 0.5, 0.85], [10.5, 1, 0.8], [0.5, 10, 0.9]]) {
-  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), rockMat);
-  rock.position.set(x, s * 0.55, z);
-  rock.rotation.set(Math.random() * 2, Math.random() * 2, Math.random() * 2);
-  rock.castShadow = rock.receiveShadow = true;
-  scene.add(rock);
-  obstacles.push({ x, z, r: s * 0.95 });
+  if (heights.length) {
+    heights.sort((a, b) => a - b);
+    arena.position.y = -heights[Math.floor(heights.length / 2)];
+  }
 }
 
 // ------------------------------------------------------------------ estado del juego
@@ -334,7 +288,7 @@ function startGame() {
   enemies = []; arrows = []; pickups = []; particles = []; telegraphs = []; spawnQueue = [];
   pendingSpawns = 0;
 
-  player.pos.set(0, 0, 0);
+  player.pos.set(0, 0, 6);   // sobre el pasto, no en el río del centro
   player.hp = PLAYER_MAX_HP;
   player.invuln = 0;
   player.attackTimer = 0;
@@ -971,15 +925,46 @@ function updateCamera(dt) {
   shake = Math.max(0, shake - dt * 1.4);
   const sx = shake > 0 ? (Math.random() - 0.5) * shake * 0.8 : 0;
   const sz = shake > 0 ? (Math.random() - 0.5) * shake * 0.8 : 0;
-  tmpV.set(player.pos.x * 0.55 + sx, 12, player.pos.z * 0.55 + 8.6 + sz);
+  // en pantallas verticales (celular) la cámara sube para ver más campo
+  const lift = camera.aspect < 0.8 ? 1.3 : 1;
+  const follow = 0.8;
+  tmpV.set(player.pos.x * follow + sx, 12 * lift, player.pos.z * follow + 8.6 * lift + sz);
   camera.position.lerp(tmpV, Math.min(1, dt * 5));
-  camera.lookAt(player.pos.x * 0.55, 0, player.pos.z * 0.55);
+  camera.lookAt(player.pos.x * follow, 0, player.pos.z * follow);
 }
 
 // ------------------------------------------------------------------ bucle principal
+// autoajuste de calidad: si el equipo no llega a ~24 fps, bajar efectos
+let perfStart = 0;
+let perfFrames = 0;
+let perfDone = false;
+function checkPerformance(now) {
+  if (perfDone) return;
+  if (!perfStart) { perfStart = now; return; }
+  perfFrames++;
+  if (now - perfStart < 3000) return;
+  perfDone = true;
+  const fps = perfFrames / ((now - perfStart) / 1000);
+  if (fps < 24) {
+    dirLight.castShadow = false;
+    renderer.setPixelRatio(1);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    scene.traverse((o) => {
+      if (o.isMesh && o.material && o.material.map) {
+        o.material.map.anisotropy = 1;
+        o.material.map.needsUpdate = true;
+      }
+    });
+    console.info(`Calidad reducida (${fps.toFixed(0)} fps)`);
+  }
+}
+
 let lastTime = performance.now();
+let frameCount = 0;
 function tick() {
   requestAnimationFrame(tick);
+  frameCount++;
+  checkPerformance(performance.now());
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
@@ -996,6 +981,21 @@ function tick() {
   renderer.render(scene, camera);
 }
 
+// ------------------------------------------------------------------ carga de modelos y arranque
+const startBtn = document.getElementById('btn-start');
+startBtn.disabled = true;
+startBtn.textContent = '⏳ Cargando… 0%';
+loadAssets((p) => {
+  startBtn.textContent = `⏳ Cargando… ${Math.round(p * 100)}%`;
+}).then(() => {
+  setupArena();
+  startBtn.disabled = false;
+  startBtn.textContent = '▶ Jugar';
+}).catch((err) => {
+  console.error(err);
+  startBtn.textContent = '⚠ Error al cargar los modelos — recargá la página';
+});
+
 updateHud();
 tick();
 
@@ -1006,6 +1006,9 @@ window.__npc3d = {
   get score() { return score; },
   get wave() { return wave; },
   get pickups() { return pickups; },
+  get state() { return state; },
+  get waveState() { return waveState; },
+  get frames() { return frameCount; },
   attack: tryAttack,
   spawn: spawnEnemy,
 };

@@ -1,6 +1,53 @@
-// Modelos 3D procedurales de los personajes, inspirados en las figuras NPC:
-// héroe blanco con espada, esqueleto, bárbaro, arquero y gigante (jefe).
+// Personajes del juego. Los enemigos y la arena usan los modelos GLB del
+// repo clash3deee (optimizados); el héroe blanco con espada, los cofres y
+// los objetos siguen siendo procedurales.
 import * as THREE from 'three';
+import { GLTFLoader } from '../lib/GLTFLoader.js?v=3';
+
+// --- modelos GLB (enemigos + arena) ---
+const MODEL_FILES = ['Esqueleto', 'Arquero', 'Barbaro', 'Gigante', 'Arena'];
+const models = {};
+
+export async function loadAssets(onProgress) {
+  const loader = new GLTFLoader();
+  let done = 0;
+  await Promise.all(MODEL_FILES.map(async (name) => {
+    const gltf = await loader.loadAsync(`./models/${name}.glb`);
+    gltf.scene.traverse((o) => {
+      if (o.isMesh) {
+        // la arena solo recibe sombras (emitirlas con tanta geometría mata el rendimiento)
+        o.castShadow = name !== 'Arena';
+        o.receiveShadow = name === 'Arena';
+      }
+    });
+    models[name] = gltf.scene;
+    done++;
+    if (onProgress) onProgress(done / MODEL_FILES.length);
+  }));
+}
+
+export function getArena() {
+  return models.Arena;
+}
+
+// clona un modelo, con materiales propios (para el parpadeo de daño)
+// y apoyado en el piso dentro de un grupo
+function cloneModel(name, scale) {
+  const inner = models[name].clone(true);
+  inner.traverse((o) => { if (o.isMesh) o.material = o.material.clone(); });
+  inner.scale.setScalar(scale);
+  const box = new THREE.Box3().setFromObject(inner);
+  inner.position.y = -box.min.y;
+  const g = new THREE.Group();
+  g.add(inner);
+  g.userData = {};
+  return g;
+}
+
+export const makeSkeleton = () => cloneModel('Esqueleto', 1.0);
+export const makeArcher = () => cloneModel('Arquero', 1.0);
+export const makeBarbarian = () => cloneModel('Barbaro', 1.05);
+export const makeGiant = () => cloneModel('Gigante', 2.1);
 
 const COLORS = {
   white: 0xf2eee4,
@@ -103,23 +150,6 @@ export function makeSword(scale = 1) {
   return g;
 }
 
-function makeBow() {
-  const g = new THREE.Group();
-  const arc = new THREE.Mesh(
-    new THREE.TorusGeometry(0.5, 0.045, 10, 24, Math.PI * 1.1),
-    mat(COLORS.wood)
-  );
-  arc.rotation.z = -Math.PI * 0.05;
-  arc.castShadow = true;
-  const stringGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(Math.cos(-Math.PI * 0.05) * 0.5, Math.sin(-Math.PI * 0.05) * 0.5, 0),
-    new THREE.Vector3(Math.cos(Math.PI * 1.05) * 0.5, Math.sin(Math.PI * 1.05) * 0.5, 0),
-  ]);
-  const string = new THREE.Line(stringGeo, new THREE.LineBasicMaterial({ color: 0xddccaa }));
-  g.add(arc, string);
-  return g;
-}
-
 // base común: grupo con referencias para animar (brazos, piernas, cabeza)
 function baseBody({ headR, headColor, bodyColor, bodyScale, armR, legR }) {
   const g = new THREE.Group();
@@ -167,179 +197,6 @@ export function makePlayer() {
   g.userData.armR.rotation.x = -0.55;
   g.userData.armL.rotation.z = 0.25;
   g.userData.sword = sword;
-  return g;
-}
-
-// --- ESQUELETO: rápido y frágil ---
-export function makeSkeleton() {
-  const g = new THREE.Group();
-  const head = sphere(0.48, COLORS.bone);
-  head.position.y = 1.42;
-  const face = makeFacePlane(0.62);
-  face.position.set(0, 0, 0.47);
-  head.add(face);
-
-  const spine = cyl(0.055, 0.055, 0.62, COLORS.bone, 8);
-  spine.position.y = 0.72;
-  const pelvis = sphere(0.14, COLORS.bone, 1.5, 0.7, 1);
-  pelvis.position.y = 0.42;
-
-  const ribs = new THREE.Group();
-  for (let i = 0; i < 3; i++) {
-    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.2 - i * 0.03, 0.035, 8, 16), mat(COLORS.bone));
-    rib.rotation.x = Math.PI / 2;
-    rib.position.y = 0.98 - i * 0.13;
-    rib.scale.z = 0.75;
-    rib.castShadow = true;
-    ribs.add(rib);
-  }
-
-  const armL = new THREE.Group();
-  const armR = new THREE.Group();
-  for (const [arm, side] of [[armL, -1], [armR, 1]]) {
-    const boneArm = cyl(0.045, 0.045, 0.42, COLORS.bone, 8);
-    boneArm.position.y = -0.2;
-    const hand = sphere(0.08, COLORS.bone);
-    hand.position.y = -0.42;
-    arm.add(boneArm, hand);
-    arm.position.set(side * 0.32, 1.02, 0);
-  }
-  const dagger = makeSword(0.55);
-  dagger.position.set(0, -0.44, 0.04);
-  armR.add(dagger);
-  armR.rotation.x = -0.5;
-
-  const legL = cyl(0.05, 0.05, 0.4, COLORS.bone, 8);
-  legL.position.set(-0.13, 0.2, 0);
-  const legR = cyl(0.05, 0.05, 0.4, COLORS.bone, 8);
-  legR.position.set(0.13, 0.2, 0);
-
-  g.add(head, spine, pelvis, ribs, armL, armR, legL, legR);
-  g.userData = { head, armL, armR, legL, legR };
-  return g;
-}
-
-// --- BÁRBARO: casco amarillo, bigote y espada ---
-export function makeBarbarian() {
-  const g = baseBody({
-    headR: 0.5, headColor: COLORS.skin, bodyColor: COLORS.skin,
-    bodyScale: [1.1, 1.05, 0.9], armR: 0.16, legR: 0.16,
-  });
-  const head = g.userData.head;
-
-  const helmet = new THREE.Mesh(
-    new THREE.SphereGeometry(0.53, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
-    mat(COLORS.yellow)
-  );
-  helmet.castShadow = true;
-  helmet.position.y = 0.05;
-  const brim = cyl(0.55, 0.55, 0.07, COLORS.yellow);
-  brim.position.y = 0.08;
-  head.add(helmet, brim);
-  g.userData.face.position.z = 0.58;
-
-  // bigote
-  for (const side of [-1, 1]) {
-    const m = sphere(0.1, COLORS.yellow, 1.4, 0.55, 0.6);
-    m.position.set(side * 0.16, -0.16, 0.44);
-    m.rotation.z = side * -0.5;
-    head.add(m);
-  }
-
-  const belt = cyl(0.45, 0.45, 0.12, COLORS.leatherDark);
-  belt.position.y = 0.5;
-  const buckle = box(0.16, 0.13, 0.05, COLORS.gold);
-  buckle.position.set(0, 0.5, 0.4);
-  g.add(belt, buckle);
-
-  const sword = makeSword(0.8);
-  sword.position.set(0, -0.44, 0.05);
-  g.userData.armR.add(sword);
-  g.userData.armR.rotation.x = -0.4;
-  return g;
-}
-
-// --- ARQUERO: capucha azul y arco ---
-export function makeArcher() {
-  const g = baseBody({
-    headR: 0.5, headColor: COLORS.white, bodyColor: COLORS.white,
-    bodyScale: [0.95, 1, 0.82], armR: 0.13, legR: 0.14,
-  });
-  const head = g.userData.head;
-
-  // capucha: cono redondeado + capa
-  const hood = new THREE.Mesh(
-    new THREE.SphereGeometry(0.56, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    mat(COLORS.blue)
-  );
-  hood.castShadow = true;
-  hood.position.y = 0.03;
-  const hoodTip = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.42, 12), mat(COLORS.blue));
-  hoodTip.position.set(0, 0.52, -0.12);
-  hoodTip.rotation.x = -0.5;
-  hoodTip.castShadow = true;
-  head.add(hood, hoodTip);
-  g.userData.face.position.z = 0.61;
-  g.userData.face.position.y = -0.12;
-
-  const cape = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.75, 14, 1, true), mat(COLORS.blue, { side: THREE.DoubleSide }));
-  cape.position.set(0, 0.72, -0.14);
-  cape.castShadow = true;
-  g.add(cape);
-
-  const belt = cyl(0.41, 0.41, 0.1, COLORS.leather);
-  belt.position.y = 0.55;
-  g.add(belt);
-
-  // carcaj en la espalda
-  const quiver = cyl(0.09, 0.09, 0.44, COLORS.leatherDark);
-  quiver.position.set(0.2, 0.95, -0.32);
-  quiver.rotation.z = -0.4;
-  g.add(quiver);
-
-  const bow = makeBow();
-  bow.position.set(0, -0.4, 0.08);
-  bow.rotation.y = Math.PI / 2;
-  g.userData.armL.add(bow);
-  g.userData.armL.rotation.x = -0.6;
-  g.userData.bow = bow;
-  return g;
-}
-
-// --- GIGANTE: jefe con pelo naranja y chaleco de cuero ---
-export function makeGiant() {
-  const g = baseBody({
-    headR: 0.55, headColor: COLORS.skin, bodyColor: COLORS.skin,
-    bodyScale: [1.35, 1.15, 1.05], armR: 0.22, legR: 0.2,
-  });
-  const head = g.userData.head;
-
-  // pelo naranja a los costados y atrás
-  for (const [x, y, z, s] of [
-    [-0.42, -0.05, 0.1, 0.28], [0.42, -0.05, 0.1, 0.28],
-    [-0.3, 0.05, -0.35, 0.3], [0.3, 0.05, -0.35, 0.3], [0, 0.02, -0.48, 0.32],
-  ]) {
-    const tuft = sphere(s, COLORS.orange, 1, 1.3, 1);
-    tuft.position.set(x, y, z);
-    head.add(tuft);
-  }
-  // cejas
-  for (const side of [-1, 1]) {
-    const brow = box(0.22, 0.07, 0.06, COLORS.orange);
-    brow.position.set(side * 0.18, 0.2, 0.46);
-    head.add(brow);
-  }
-
-  // chaleco de cuero
-  const vest = cyl(0.52, 0.62, 0.72, COLORS.leather);
-  vest.position.y = 0.68;
-  const belt = cyl(0.58, 0.58, 0.14, COLORS.leatherDark);
-  belt.position.y = 0.42;
-  const buckle = box(0.2, 0.16, 0.06, COLORS.gold);
-  buckle.position.set(0, 0.42, 0.56);
-  g.add(vest, belt, buckle);
-
-  g.scale.setScalar(2.1);
   return g;
 }
 
