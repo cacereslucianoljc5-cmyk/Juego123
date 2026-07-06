@@ -48,7 +48,13 @@
   .hud > * { position: absolute; }
 
   #hearts { top: 16px; left: 18px; font-size: 30px; letter-spacing: 2px;
-    text-shadow: 0 2px 4px rgba(0,0,0,.8); }
+    text-shadow: 0 2px 4px rgba(0,0,0,.8); max-width: 40vw; line-height: 1.1; }
+  @media (max-width: 700px) {
+    #hearts { font-size: 19px; top: 12px; }
+    #wave-label { font-size: 15px; top: 10px; }
+    #stats .big { font-size: 20px; }
+    #stats .row { font-size: 13px; }
+  }
 
   #stats { top: 14px; right: 18px; text-align: right; text-shadow: 0 2px 4px rgba(0,0,0,.9); }
   #stats .big { font-size: 26px; font-weight: bold; color: var(--gold); }
@@ -218,6 +224,6 @@
   <script type="importmap">
     { "imports": { "three": "./lib/three.module.js?v=3" } }
   </script>
-  <script type="module" src="./js/game.js?v=3"></script>
+  <script type="module" src="./js/game.js?v=4"></script>
 </body>
 </html>

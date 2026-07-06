@@ -9,7 +9,7 @@ import {
 const ROOM = 16;              // mitad del área jugable dentro de la arena
 const ARENA_SCALE = 24;       // escala del modelo Arena.glb
 const PLAYER_SPEED = 6.2;
-const PLAYER_MAX_HP = 6;      // medios corazones
+const PLAYER_MAX_HP = 12;     // medios corazones (6 corazones)
 const ATTACK_RANGE = 2.5;
 const ATTACK_ARC = Math.PI * 0.62;
 const ATTACK_COOLDOWN = 0.38;
@@ -913,7 +913,9 @@ function updateWaves(dt) {
     // sin enemigos vivos ni apariciones pendientes
     if (!enemies.length && pendingSpawns === 0 && !spawnQueue.length) {
       score += wave * 50;
-      showBanner(`✔ Oleada ${wave} superada`, `+${wave * 50} puntos`);
+      player.hp = PLAYER_MAX_HP;   // vida completa al superar la oleada
+      audio.pickup();
+      showBanner(`✔ Oleada ${wave} superada`, `+${wave * 50} puntos · ❤️ vida restaurada`);
       waveState = 'cleared';
       waveTimer = 3.2;
       updateHud();
