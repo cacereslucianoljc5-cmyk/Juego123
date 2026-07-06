@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mazmorra NPC — juego estilo Isaac en 3D</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>" />
+<style>
+  :root {
+    --gold: #f5c542;
+    --panel: rgba(12, 10, 18, 0.92);
+    --border: rgba(245, 197, 66, 0.35);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0810; }
+  body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #eee; user-select: none; }
+  #game-canvas { display: block; width: 100%; height: 100%; }
+
+  .hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .hud > * { position: absolute; }
+
+  #hearts { top: 16px; left: 18px; font-size: 30px; letter-spacing: 2px;
+    text-shadow: 0 2px 4px rgba(0,0,0,.8); }
+
+  #stats { top: 14px; right: 18px; text-align: right; text-shadow: 0 2px 4px rgba(0,0,0,.9); }
+  #stats .big { font-size: 26px; font-weight: bold; color: var(--gold); }
+  #stats .row { font-size: 16px; margin-top: 2px; }
+
+  #wave-label { top: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 20px; font-weight: bold; color: #ffd9a0;
+    text-shadow: 0 2px 4px rgba(0,0,0,.9); }
+
+  #banner { top: 34%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 54px; font-weight: 900; color: var(--gold); opacity: 0;
+    text-shadow: 0 0 24px rgba(245,197,66,.5), 0 3px 6px rgba(0,0,0,.9);
+    transition: opacity .3s; text-align: center; }
+  #banner .sub { font-size: 20px; color: #fff; font-weight: normal; margin-top: 6px; }
+  #banner.show { opacity: 1; }
+
+  #boss-bar { bottom: 26px; left: 50%; transform: translateX(-50%);
+    width: min(520px, 70vw); display: none; }
+  #boss-bar .name { text-align: center; font-size: 15px; color: #ffb0a0; margin-bottom: 4px;
+    text-shadow: 0 1px 3px #000; }
+  #boss-bar .track { height: 14px; background: rgba(0,0,0,.6); border: 1px solid #a33;
+    border-radius: 7px; overflow: hidden; }
+  #boss-bar .fill { height: 100%; width: 100%; border-radius: 6px;
+    background: linear-gradient(90deg, #ff5533, #ffaa33); transition: width .15s; }
+
+  #hint { bottom: 12px; left: 18px; font-size: 13px; color: rgba(255,255,255,.55);
+    text-shadow: 0 1px 2px #000; }
+
+  #chest-toast { bottom: 70px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 18px; font-size: 16px; color: var(--gold); opacity: 0; transition: opacity .3s; }
+  #chest-toast.show { opacity: 1; }
+
+  #vignette { inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); }
+  #damage-flash { inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(255,0,0,.35) 100%);
+    opacity: 0; transition: opacity .4s; }
+  #damage-flash.show { opacity: 1; transition: opacity .05s; }
+
+  .overlay { position: fixed; inset: 0; z-index: 10; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(5, 4, 10, 0.78); backdrop-filter: blur(3px); }
+  .overlay.show { display: flex; }
+  .panel { background: var(--panel); border: 2px solid var(--border); border-radius: 16px;
+    padding: 34px 44px; text-align: center; max-width: min(640px, 92vw);
+    max-height: 88vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.7); }
+  .panel h1 { color: var(--gold); font-size: 40px; margin-bottom: 10px; }
+  .panel h2 { color: var(--gold); font-size: 28px; margin-bottom: 12px; }
+  .panel p { color: #ccc; line-height: 1.5; margin-bottom: 10px; }
+  .panel .keys { display: inline-block; text-align: left; margin: 10px 0 16px;
+    color: #ddd; font-size: 15px; line-height: 1.9; }
+  .panel kbd { background: #262033; border: 1px solid #4a3f66; border-bottom-width: 3px;
+    border-radius: 5px; padding: 1px 8px; font-family: inherit; color: #ffd9a0; }
+  .btn { pointer-events: auto; cursor: pointer; display: inline-block;
+    background: linear-gradient(180deg, #ffd75e, #e0a428); color: #241a05;
+    font-size: 19px; font-weight: 800; border: none; border-radius: 10px;
+    padding: 12px 34px; margin: 6px; box-shadow: 0 4px 0 #8a6210, 0 8px 18px rgba(0,0,0,.5);
+    transition: transform .08s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a6210; }
+  .btn.alt { background: linear-gradient(180deg, #6a5f8a, #4a4066); color: #eee;
+    box-shadow: 0 4px 0 #2a2440, 0 8px 18px rgba(0,0,0,.5); }
+
+  .score-final { font-size: 22px; color: #fff; margin: 8px 0; }
+  .score-final b { color: var(--gold); font-size: 30px; }
+
+  /* ---- menú de cofres ---- */
+  #chest-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center;
+    margin: 18px 0; min-height: 90px; }
+  .chest-card { pointer-events: auto; cursor: pointer; width: 118px; padding: 14px 8px;
+    background: #1c1628; border: 2px solid #3a3152; border-radius: 12px;
+    transition: transform .1s, border-color .1s; }
+  .chest-card:hover { transform: translateY(-3px); border-color: var(--gold); }
+  .chest-card .icon { font-size: 42px; }
+  .chest-card .label { font-size: 13px; margin-top: 6px; color: #cbb; }
+  .chest-card.rare { border-color: #b78a2a; background: #2a2010; }
+  .chest-card.epic { border-color: #7d4ad1; background: #221535; }
+  .chest-card.opening { animation: shake .5s; }
+  @keyframes shake {
+    0%,100% { transform: rotate(0); } 20% { transform: rotate(-8deg) scale(1.05); }
+    40% { transform: rotate(8deg) scale(1.1); } 60% { transform: rotate(-6deg) scale(1.12); }
+    80% { transform: rotate(5deg) scale(1.15); }
+  }
+  #chest-reward { min-height: 34px; font-size: 22px; color: var(--gold); font-weight: bold; }
+  #chest-empty { color: #887; font-style: italic; padding: 20px 0; }
+  .coin-balance { font-size: 18px; color: #ffd75e; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <div class="hud">
+    <div id="vignette"></div>
+    <div id="damage-flash"></div>
+    <div id="hearts"></div>
+    <div id="wave-label"></div>
+    <div id="stats">
+      <div class="big" id="score">0</div>
+      <div class="row">🪙 <span id="coins">0</span> &nbsp; 🧰 <span id="chest-count">0</span></div>
+      <div class="row" style="opacity:.7">Récord: <span id="best">0</span></div>
+    </div>
+    <div id="banner"></div>
+    <div id="boss-bar"><div class="name" id="boss-name"></div>
+      <div class="track"><div class="fill" id="boss-fill"></div></div></div>
+    <div id="chest-toast"></div>
+    <div id="hint">WASD mover · Ratón apuntar · Clic / Espacio atacar · <b>E</b> cofres · <b>P</b> pausa</div>
+  </div>
+
+  <div class="overlay show" id="start-overlay">
+    <div class="panel">
+      <h1>⚔️ Mazmorra NPC</h1>
+      <p>Sobreviví a las oleadas de enemigos en la mazmorra.<br>
+         Cada 5 oleadas aparece un <b>jefe gigante</b> que suelta un <b>cofre</b> con monedas.</p>
+      <div class="keys">
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> moverse<br>
+        <kbd>Ratón</kbd> apuntar — <kbd>Clic</kbd> / <kbd>Espacio</kbd> espadazo<br>
+        <kbd>E</kbd> abrir menú de cofres — <kbd>P</kbd> pausa
+      </div><br>
+      <button class="btn" id="btn-start">▶ Jugar</button>
+      <button class="btn alt" id="btn-chests-start">🧰 Mis cofres</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="gameover-overlay">
+    <div class="panel">
+      <h1>💀 Fin del juego</h1>
+      <div class="score-final">Puntaje: <b id="final-score">0</b></div>
+      <div class="score-final">Oleadas sobrevividas: <b id="final-waves">0</b></div>
+      <p id="new-record" style="color:#ffd75e; display:none">🏆 ¡Nuevo récord!</p>
+      <button class="btn" id="btn-retry">↻ Reintentar</button>
+      <button class="btn alt" id="btn-chests-over">🧰 Mis cofres</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="pause-overlay">
+    <div class="panel">
+      <h2>⏸ Pausa</h2>
+      <button class="btn" id="btn-resume">▶ Continuar</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="chest-overlay">
+    <div class="panel">
+      <h2>🧰 Mis cofres</h2>
+      <div class="coin-balance">🪙 Monedas: <span id="menu-coins">0</span></div>
+      <p style="font-size:14px">Hacé clic en un cofre para abrirlo.</p>
+      <div id="chest-grid"></div>
+      <div id="chest-reward"></div>
+      <button class="btn alt" id="btn-close-chests">Volver</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "./lib/three.module.js" } }
+  </script>
+  <script type="module" src="./js/game.js"></script>
+</body>
+</html>
