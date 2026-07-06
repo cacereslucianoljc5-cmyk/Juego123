@@ -184,6 +184,7 @@ const player = {
 };
 
 let enemies = [];
+let dying = [];     // enemigos muertos en plena animación de caída
 let arrows = [];
 let pickups = [];   // { kind: 'chest'|'heart', mesh, pos, rarity?, bob }
 let particles = [];
@@ -281,6 +282,8 @@ document.getElementById('btn-chests-over').addEventListener('click', () => openC
 function startGame() {
   audio.unlock();
   for (const e of enemies) scene.remove(e.mesh);
+  for (const d of dying) scene.remove(d.mesh);
+  dying = [];
   for (const a of arrows) scene.remove(a.mesh);
   for (const p of pickups) scene.remove(p.mesh);
   for (const t of telegraphs) scene.remove(t.mesh);
@@ -399,6 +402,8 @@ function spawnEnemy(type) {
       walkPhase: Math.random() * 6,
       hitFlash: 0,
       slamAt: -1,
+      atkT: -1,        // temporizador de la animación de ataque
+      moveBlend: 0,    // 0 quieto → 1 caminando
     };
     enemy.maxHp = enemy.hp;
     enemies.push(enemy);
@@ -431,7 +436,7 @@ function damageEnemy(enemy, dmg, knockDir) {
 }
 
 function killEnemy(enemy) {
-  scene.remove(enemy.mesh);
+  dying.push({ mesh: enemy.mesh, t: 0 });   // animación de caída antes de desaparecer
   enemies = enemies.filter(e => e !== enemy);
   score += enemy.cfg.score * (1 + Math.floor(wave / 10));
   audio.kill();
@@ -754,6 +759,7 @@ function updateEnemies(dt) {
       else { vx = -tmpV.z * 0.6; vz = tmpV.x * 0.6; } // rodear
       if (e.cooldown <= 0 && dist < cfg.attackRange) {
         e.cooldown = cfg.cooldown;
+        e.atkT = 0;
         shootArrow(e);
       }
     } else if (cfg.boss) {
@@ -768,6 +774,7 @@ function updateEnemies(dt) {
         e.slamAt -= dt;
         if (e.slamAt <= 0) {
           e.slamAt = -1;
+          e.atkT = 0;
           e.cooldown = cfg.cooldown;
           shake = Math.max(shake, 0.45);
           audio.boss();
@@ -779,6 +786,7 @@ function updateEnemies(dt) {
       vx = tmpV.x; vz = tmpV.z;
       if (dist < cfg.attackRange && e.cooldown <= 0) {
         e.cooldown = cfg.cooldown;
+        e.atkT = 0;
         damagePlayer(cfg.dmg);
         // pequeño empujón al golpear
         e.pos.addScaledVector(tmpV, -0.3);
@@ -805,9 +813,43 @@ function updateEnemies(dt) {
 
     e.mesh.position.copy(e.pos);
     e.mesh.rotation.y = Math.atan2(tmpV.x, tmpV.z);
-    e.walkPhase += dt * 9;
-    e.mesh.position.y = Math.abs(Math.sin(e.walkPhase)) * 0.08 * (cfg.boss ? 2 : 1);
-    if (e.slamAt > 0) e.mesh.position.y += Math.sin((0.75 - e.slamAt) * Math.PI / 0.75) * 1.4;
+
+    // ---- animación procedural (los GLB no traen esqueleto) ----
+    const inner = e.mesh.children[0];
+    const moving = (vx !== 0 || vz !== 0) ? 1 : 0;
+    e.moveBlend += (moving - e.moveBlend) * Math.min(1, dt * 8);
+    const stride = cfg.boss ? 6 : 10;
+    e.walkPhase += dt * stride * (0.35 + 0.65 * e.moveBlend);
+
+    // caminar: saltitos + contoneo lateral + leve inclinación hacia adelante
+    e.mesh.position.y = Math.abs(Math.sin(e.walkPhase)) * 0.1 * (cfg.boss ? 2.2 : 1) * (0.3 + 0.7 * e.moveBlend);
+    let tiltX = 0.09 * e.moveBlend;
+    let tiltZ = Math.sin(e.walkPhase) * 0.1 * e.moveBlend;
+    let lungeZ = 0;
+
+    // ataque: embestida (cuerpo a cuerpo / pisotón) o retroceso (arquero)
+    if (e.atkT >= 0) {
+      e.atkT += dt;
+      const dur = cfg.boss ? 0.5 : 0.32;
+      const k = e.atkT / dur;
+      if (k >= 1) {
+        e.atkT = -1;
+      } else if (cfg.ranged) {
+        tiltX = -Math.sin(k * Math.PI) * 0.4;          // el arquero se echa atrás al soltar
+      } else {
+        tiltX = Math.sin(k * Math.PI) * (cfg.boss ? 0.7 : 0.95);
+        lungeZ = Math.sin(k * Math.PI) * (cfg.boss ? 0.5 : 0.35);
+      }
+    }
+    // el gigante se agacha tomando impulso durante el aviso del pisotón
+    if (e.slamAt > 0) {
+      const kk = (0.75 - e.slamAt) / 0.75;
+      e.mesh.position.y += Math.sin(kk * Math.PI) * 1.4;
+      tiltX = -0.45 * Math.sin(kk * Math.PI);
+    }
+    inner.rotation.x = tiltX;
+    inner.rotation.z = tiltZ;
+    inner.position.z = lungeZ;
 
     // parpadeo al recibir daño
     if (e.hitFlash > 0) {
@@ -862,6 +904,18 @@ function updatePickups(dt) {
     p.mesh.rotation.y += dt * (p.kind === 'heart' ? 2.5 : 0.8);
     if (p.pos.distanceTo(player.pos) < 1.1) collectPickup(p);
   }
+}
+
+function updateDying(dt) {
+  dying = dying.filter((d) => {
+    d.t += dt;
+    const k = d.t / 0.45;
+    if (k >= 1) { scene.remove(d.mesh); return false; }
+    d.mesh.rotation.x = k * 1.5;                    // cae de espaldas
+    d.mesh.scale.setScalar(Math.max(0.01, 1 - k * 0.7));
+    d.mesh.position.y = Math.max(0, d.mesh.position.y - dt * 1.2);
+    return true;
+  });
 }
 
 function updateEffects(dt) {
@@ -974,6 +1028,7 @@ function tick() {
   if (state === 'playing') {
     updatePlayer(dt);
     updateEnemies(dt);
+    updateDying(dt);
     updateArrows(dt);
     updatePickups(dt);
     updateWaves(dt);
