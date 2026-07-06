@@ -1,0 +1,10 @@
+node_modules
+.git
+.github
+*.local
+.DS_Store
+npm-debug.log*
+.vscode
+Dockerfile
+fly.toml
+FLY_DEPLOY.md

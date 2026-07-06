@@ -1,0 +1,21 @@
+# Fly.io configuration for Juego123 (static site)
+# Docs: https://fly.io/docs/reference/configuration/
+
+app = "juego123"
+primary_region = "gru"  # São Paulo (closest region to Argentina)
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
