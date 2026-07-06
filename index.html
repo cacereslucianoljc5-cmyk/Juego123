@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Mazmorra NPC — juego estilo Isaac en 3D</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>" />
 <style>
@@ -13,8 +13,36 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0810; }
-  body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #eee; user-select: none; }
-  #game-canvas { display: block; width: 100%; height: 100%; }
+  body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #eee; user-select: none;
+    -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  #game-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* ---- controles táctiles ---- */
+  #touch-controls { display: none; }
+  body.touch #touch-controls { display: block; }
+  body.touch #hint { display: none; }
+  #touch-controls > * { position: fixed; pointer-events: auto; touch-action: none; z-index: 6; }
+  #joystick { bottom: max(24px, env(safe-area-inset-bottom)); left: 22px;
+    width: 132px; height: 132px; border-radius: 50%;
+    background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.22); }
+  #joystick .stick { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px;
+    border-radius: 50%; background: rgba(255,255,255,.34);
+    border: 2px solid rgba(255,255,255,.4); transform: translate(-50%, -50%); }
+  .touch-btn { border: none; border-radius: 50%; color: #241a05; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+  .touch-btn:active { filter: brightness(1.2); transform: scale(.94); }
+  #btn-attack { bottom: max(28px, env(safe-area-inset-bottom)); right: 26px;
+    width: 104px; height: 104px; font-size: 50px;
+    background: radial-gradient(circle at 35% 30%, #ffe28a, #e0a428 70%);
+    border: 3px solid rgba(255,255,255,.35); }
+  #btn-chest-touch { bottom: 150px; right: 34px; width: 58px; height: 58px; font-size: 26px;
+    background: rgba(40,32,58,.85); border: 2px solid var(--border); }
+  #btn-pause-touch { bottom: 222px; right: 34px; width: 58px; height: 58px; font-size: 24px;
+    background: rgba(40,32,58,.85); border: 2px solid rgba(255,255,255,.25); }
+  #keys-touch { display: none; }
+  body.touch #keys-touch { display: inline-block; }
+  body.touch #keys-desktop { display: none; }
 
   .hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
   .hud > * { position: absolute; }
@@ -129,15 +157,28 @@
     <div id="hint">WASD mover · Ratón apuntar · Clic / Espacio atacar · <b>E</b> cofres · <b>P</b> pausa</div>
   </div>
 
+  <div id="touch-controls">
+    <div id="joystick"><div class="stick" id="joystick-stick"></div></div>
+    <button class="touch-btn" id="btn-attack">⚔️</button>
+    <button class="touch-btn" id="btn-chest-touch">🧰</button>
+    <button class="touch-btn" id="btn-pause-touch">⏸</button>
+  </div>
+
   <div class="overlay show" id="start-overlay">
     <div class="panel">
       <h1>⚔️ Mazmorra NPC</h1>
       <p>Sobreviví a las oleadas de enemigos en la mazmorra.<br>
          Cada 5 oleadas aparece un <b>jefe gigante</b> que suelta un <b>cofre</b> con monedas.</p>
-      <div class="keys">
+      <div class="keys" id="keys-desktop">
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> moverse<br>
         <kbd>Ratón</kbd> apuntar — <kbd>Clic</kbd> / <kbd>Espacio</kbd> espadazo<br>
         <kbd>E</kbd> abrir menú de cofres — <kbd>P</kbd> pausa
+      </div>
+      <div class="keys" id="keys-touch">
+        🕹️ Joystick (izquierda) para moverse<br>
+        ⚔️ Botón (derecha): mantenelo apretado y tu héroe<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;ataca solo apuntando al enemigo más cercano<br>
+        🧰 cofres — ⏸ pausa
       </div><br>
       <button class="btn" id="btn-start">▶ Jugar</button>
       <button class="btn alt" id="btn-chests-start">🧰 Mis cofres</button>

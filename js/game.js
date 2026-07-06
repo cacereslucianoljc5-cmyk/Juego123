@@ -264,6 +264,58 @@ window.addEventListener('mousemove', (e) => {
 });
 canvas.addEventListener('mousedown', (e) => { if (e.button === 0) tryAttack(); });
 
+// ------------------------------------------------------------------ controles táctiles
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const touchInput = { x: 0, z: 0, attacking: false };
+if (isTouchDevice) {
+  document.body.classList.add('touch');
+
+  const joy = document.getElementById('joystick');
+  const stick = document.getElementById('joystick-stick');
+  const JOY_MAX = 46;
+  let joyPointer = null;
+  function moveStick(e) {
+    const rect = joy.getBoundingClientRect();
+    let dx = e.clientX - (rect.left + rect.width / 2);
+    let dy = e.clientY - (rect.top + rect.height / 2);
+    const len = Math.hypot(dx, dy);
+    if (len > JOY_MAX) { dx = dx / len * JOY_MAX; dy = dy / len * JOY_MAX; }
+    stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    touchInput.x = dx / JOY_MAX;
+    touchInput.z = dy / JOY_MAX;
+  }
+  joy.addEventListener('pointerdown', (e) => {
+    joyPointer = e.pointerId;
+    joy.setPointerCapture(e.pointerId);
+    audio.unlock();
+    moveStick(e);
+  });
+  joy.addEventListener('pointermove', (e) => { if (e.pointerId === joyPointer) moveStick(e); });
+  const releaseJoy = (e) => {
+    if (e.pointerId !== joyPointer) return;
+    joyPointer = null;
+    touchInput.x = touchInput.z = 0;
+    stick.style.transform = 'translate(-50%, -50%)';
+  };
+  joy.addEventListener('pointerup', releaseJoy);
+  joy.addEventListener('pointercancel', releaseJoy);
+
+  const atkBtn = document.getElementById('btn-attack');
+  atkBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    touchInput.attacking = true;
+    audio.unlock();
+    tryAttack();
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+    atkBtn.addEventListener(ev, () => { touchInput.attacking = false; });
+  }
+  atkBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  document.getElementById('btn-chest-touch').addEventListener('click', toggleChestMenu);
+  document.getElementById('btn-pause-touch').addEventListener('click', togglePause);
+}
+
 document.getElementById('btn-start').addEventListener('click', startGame);
 document.getElementById('btn-retry').addEventListener('click', startGame);
 document.getElementById('btn-resume').addEventListener('click', togglePause);
@@ -637,22 +689,42 @@ function updatePlayer(dt) {
     0,
     (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0)
   );
+  // joystick táctil
+  if (Math.hypot(touchInput.x, touchInput.z) > 0.18) {
+    tmpV.set(touchInput.x, 0, touchInput.z);
+  }
   const moving = tmpV.lengthSq() > 0;
   if (moving) {
-    tmpV.normalize();
+    if (tmpV.lengthSq() > 1) tmpV.normalize();
     player.pos.addScaledVector(tmpV, PLAYER_SPEED * dt);
     clampToRoom(player.pos, player.radius);
     player.walkPhase += dt * 11;
   }
 
-  // apuntar con el ratón
-  raycaster.setFromCamera(mouse, camera);
-  if (raycaster.ray.intersectPlane(floorPlane, aimPoint)) {
-    const dx = aimPoint.x - player.pos.x;
-    const dz = aimPoint.z - player.pos.z;
-    if (dx * dx + dz * dz > 0.04) player.facing = Math.atan2(dx, dz);
-  } else if (moving) {
-    player.facing = Math.atan2(tmpV.x, tmpV.z);
+  if (isTouchDevice) {
+    // en el celular: apuntar solo al enemigo más cercano
+    let nearest = null, nearestD = Infinity;
+    for (const e of enemies) {
+      const d = e.pos.distanceToSquared(player.pos);
+      if (d < nearestD) { nearestD = d; nearest = e; }
+    }
+    if (nearest) {
+      player.facing = Math.atan2(nearest.pos.x - player.pos.x, nearest.pos.z - player.pos.z);
+    } else if (moving) {
+      player.facing = Math.atan2(tmpV.x, tmpV.z);
+    }
+    // mantener apretado el botón = atacar sin parar
+    if (touchInput.attacking) tryAttack();
+  } else {
+    // apuntar con el ratón
+    raycaster.setFromCamera(mouse, camera);
+    if (raycaster.ray.intersectPlane(floorPlane, aimPoint)) {
+      const dx = aimPoint.x - player.pos.x;
+      const dz = aimPoint.z - player.pos.z;
+      if (dx * dx + dz * dz > 0.04) player.facing = Math.atan2(dx, dz);
+    } else if (moving) {
+      player.facing = Math.atan2(tmpV.x, tmpV.z);
+    }
   }
 
   player.mesh.position.copy(player.pos);
