@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {
   makePlayer, makeSkeleton, makeBarbarian, makeArcher, makeGiant,
   makeChest, makeArrow, makeHeartPickup,
-} from './characters.js';
+} from './characters.js?v=2';
 
 // ------------------------------------------------------------------ constantes
 const ROOM = 17;              // mitad del ancho de la sala
