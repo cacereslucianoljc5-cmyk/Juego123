@@ -44,5 +44,10 @@ y abrir <http://localhost:8000> (o el puerto que indique).
 
 ## Despliegue
 
-Cada push a `main` o a `claude/isaac-style-3d-game-27nx2u` publica el juego en
-GitHub Pages mediante [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+Cada push a `main` publica el juego en GitHub Pages (vía la rama `gh-pages`,
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
+
+**Al publicar cambios**: subí el número en `version.json` **y** el
+`window.GAME_VERSION` de `index.html` (deben coincidir). La página compara su
+versión contra `version.json` (sin caché) y se recarga sola si quedó vieja —
+así la caché de 10 minutos de GitHub Pages no muestra código desactualizado.

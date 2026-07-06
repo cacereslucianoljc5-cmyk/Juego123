@@ -5,6 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Mazmorra NPC — juego estilo Isaac en 3D</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>" />
+<script>
+  // Auto-actualización: si el servidor tiene una versión más nueva que esta
+  // página (cacheada), recargar una vez con la versión nueva en la URL.
+  window.GAME_VERSION = 5;
+  fetch('./version.json?nc=' + Date.now(), { cache: 'no-store' })
+    .then((r) => r.json())
+    .then(({ v }) => {
+      if (v <= window.GAME_VERSION) return;
+      const key = 'reintento_v' + v;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        location.replace(location.pathname + '?v=' + v);
+      } else {
+        const b = document.createElement('div');
+        b.textContent = '🔄 Hay una versión nueva del juego — tocá acá para actualizar';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99;background:#e0a428;color:#241a05;' +
+          'font:bold 15px sans-serif;text-align:center;padding:10px;cursor:pointer';
+        b.onclick = () => location.replace(location.pathname + '?v=' + v + '&r=' + Date.now());
+        document.body.appendChild(b);
+      }
+    })
+    .catch(() => {});
+</script>
 <style>
   :root {
     --gold: #f5c542;
