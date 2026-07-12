@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>🎨 Retexturizador 3D con IA</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>" />
+<style>
+  :root {
+    --gold: #f5c542;
+    --gold-soft: #ffd75e;
+    --panel: rgba(16, 13, 24, 0.94);
+    --panel2: #1c1628;
+    --border: rgba(245, 197, 66, 0.35);
+    --border-soft: #3a3152;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0810; }
+  body {
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #eee;
+    display: flex; height: 100vh; -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ---- Panel lateral ---- */
+  #sidebar {
+    width: 360px; max-width: 88vw; height: 100%; flex-shrink: 0;
+    background: var(--panel); border-right: 2px solid var(--border);
+    display: flex; flex-direction: column; overflow-y: auto;
+  }
+  #sidebar::-webkit-scrollbar { width: 8px; }
+  #sidebar::-webkit-scrollbar-thumb { background: #3a3152; border-radius: 4px; }
+
+  .brand { padding: 18px 20px 10px; }
+  .brand h1 { color: var(--gold); font-size: 22px; letter-spacing: .3px; }
+  .brand p { color: #9c93b0; font-size: 12.5px; margin-top: 4px; line-height: 1.45; }
+
+  .section { padding: 12px 20px; border-top: 1px solid rgba(255,255,255,.06); }
+  .section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: #b8a7d8; margin-bottom: 10px; opacity: .85; }
+
+  textarea#prompt {
+    width: 100%; min-height: 70px; resize: vertical; background: #120e1c;
+    border: 1.5px solid var(--border-soft); border-radius: 10px; color: #f3ecff;
+    font: 15px "Trebuchet MS", sans-serif; padding: 10px 12px; outline: none;
+  }
+  textarea#prompt:focus { border-color: var(--gold); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+  .chip {
+    cursor: pointer; font-size: 12px; padding: 5px 10px; border-radius: 20px;
+    background: var(--panel2); border: 1px solid var(--border-soft); color: #d6cae8;
+    transition: transform .08s, border-color .1s, background .1s;
+  }
+  .chip:hover { border-color: var(--gold); color: var(--gold-soft); transform: translateY(-1px); }
+  .chip:active { transform: translateY(0); }
+
+  .btn {
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: linear-gradient(180deg, var(--gold-soft), #e0a428); color: #241a05;
+    font-size: 15px; font-weight: 800; border: none; border-radius: 10px;
+    padding: 11px 16px; box-shadow: 0 4px 0 #8a6210, 0 8px 16px rgba(0,0,0,.5);
+    transition: transform .08s; width: 100%;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a6210; }
+  .btn:disabled { filter: grayscale(.6) brightness(.7); cursor: not-allowed; transform: none; }
+  .btn.alt { background: linear-gradient(180deg, #6a5f8a, #4a4066); color: #f0ecff;
+    box-shadow: 0 4px 0 #2a2440, 0 8px 16px rgba(0,0,0,.5); }
+  .btn.small { font-size: 13px; padding: 9px 12px; }
+  .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+
+  select, input[type="range"] { width: 100%; }
+  select {
+    background: #120e1c; border: 1.5px solid var(--border-soft); border-radius: 9px;
+    color: #f3ecff; padding: 9px 10px; font: 14px "Trebuchet MS", sans-serif; outline: none;
+  }
+  select:focus { border-color: var(--gold); }
+
+  .slider { margin-bottom: 12px; }
+  .slider label { display: flex; justify-content: space-between; font-size: 13px;
+    color: #cbbfe0; margin-bottom: 4px; }
+  .slider label b { color: var(--gold-soft); font-weight: 700; }
+  input[type="range"] { accent-color: var(--gold); height: 4px; }
+
+  .toggle-row { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #cbbfe0; }
+  .toggle-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .toggle-row input { accent-color: var(--gold); }
+
+  /* ---- Vista previa de mapas ---- */
+  #preview-box { display: none; gap: 12px; align-items: flex-start; }
+  .thumb-wrap { text-align: center; }
+  .thumb-wrap canvas { width: 74px; height: 74px; border-radius: 8px;
+    border: 1px solid var(--border-soft); background: #000; image-rendering: auto; }
+  .thumb-wrap span { display: block; font-size: 10.5px; color: #9c93b0; margin-top: 3px; }
+  #spec-json { flex: 1; font: 11px/1.5 ui-monospace, "Consolas", monospace; color: #9fd0b0;
+    background: #0e0b16; border: 1px solid var(--border-soft); border-radius: 8px;
+    padding: 8px; max-height: 150px; overflow: auto; white-space: pre-wrap; }
+
+  .muted { font-size: 11.5px; color: #7d7392; margin-top: 6px; line-height: 1.4; }
+
+  /* ---- Visor ---- */
+  #stage { flex: 1; position: relative; min-width: 0; }
+  #viewer { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #status {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+    background: linear-gradient(0deg, rgba(10,8,16,.92), rgba(10,8,16,0));
+    padding: 22px 20px 14px; font-size: 14px; color: #cbb; pointer-events: none;
+  }
+  #topbar {
+    position: absolute; top: 0; right: 0; z-index: 4; padding: 12px 16px;
+    display: flex; gap: 10px; align-items: center;
+  }
+  #topbar a { color: #b8a7d8; font-size: 13px; text-decoration: none;
+    background: var(--panel); border: 1px solid var(--border-soft);
+    padding: 7px 12px; border-radius: 20px; }
+  #topbar a:hover { border-color: var(--gold); color: var(--gold-soft); }
+
+  #drop-hint {
+    position: fixed; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center; pointer-events: none;
+    background: rgba(8,6,14,.82); backdrop-filter: blur(2px);
+  }
+  #drop-hint.show { display: flex; }
+  #drop-hint .box { border: 3px dashed var(--gold); border-radius: 18px;
+    padding: 50px 70px; text-align: center; color: var(--gold-soft); font-size: 22px; font-weight: 800; }
+  #drop-hint .box small { display: block; font-size: 14px; color: #cbb; font-weight: normal; margin-top: 8px; }
+
+  /* ---- móvil: panel arriba, visor abajo ---- */
+  @media (max-width: 760px) {
+    body { flex-direction: column; }
+    #sidebar { width: 100%; max-width: none; height: 52%; border-right: none;
+      border-bottom: 2px solid var(--border); }
+    #stage { height: 48%; }
+  }
+</style>
+</head>
+<body>
+  <aside id="sidebar">
+    <div class="brand">
+      <h1>🎨 Retexturizador 3D · IA</h1>
+      <p>Escribí un material o estilo y la app <b>repinta tu modelo 3D</b> con texturas
+         generadas al vuelo (albedo, normales, rugosidad y emisión). 100% en tu navegador.</p>
+    </div>
+
+    <div class="section">
+      <h2>1 · Tu modelo</h2>
+      <div class="btn-row">
+        <button class="btn alt small" id="btn-upload">⬆️ Subir .glb / .gltf</button>
+      </div>
+      <!-- sin filtro accept: en Android los .glb se reportan como
+           application/octet-stream y el selector los atenúa. Validamos el
+           nombre en JS. -->
+      <input type="file" id="file-input" hidden />
+      <p class="muted">O arrastrá el archivo a la ventana. Se carga un modelo de ejemplo para empezar.
+        Mallas detectadas: <b id="mesh-count">0</b>.</p>
+    </div>
+
+    <div class="section">
+      <h2>2 · Prompt</h2>
+      <textarea id="prompt" placeholder="ej: oro viejo con gemas rojas · madera de roble · escamas de dragón verde · metal oxidado · mármol blanco · lava incandescente · neón cyberpunk"></textarea>
+      <div class="chips">
+        <span class="chip" data-prompt="oro viejo pulido">oro viejo</span>
+        <span class="chip" data-prompt="madera de roble">madera</span>
+        <span class="chip" data-prompt="metal oxidado desgastado">metal oxidado</span>
+        <span class="chip" data-prompt="escamas de dragón verde esmeralda">escamas dragón</span>
+        <span class="chip" data-prompt="mármol blanco con vetas negras">mármol</span>
+        <span class="chip" data-prompt="camuflaje militar">camuflaje</span>
+        <span class="chip" data-prompt="lava incandescente">lava</span>
+        <span class="chip" data-prompt="hielo azul brillante">hielo</span>
+        <span class="chip" data-prompt="neón cyberpunk violeta">neón</span>
+        <span class="chip" data-prompt="cuero marrón gastado">cuero</span>
+        <span class="chip" data-prompt="ladrillos rojos">ladrillos</span>
+        <span class="chip" data-prompt="tela azul a rayas amarillas">tela rayas</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btn-apply">✨ Repintar</button>
+        <button class="btn alt small" id="btn-reset" style="width:auto">↺ Original</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>3 · Objetivo y estilo</h2>
+      <select id="mesh-target"><option value="all">🎯 Todo el modelo</option></select>
+      <select id="style" style="margin-top:8px">
+        <option value="pbr">💎 Realista (PBR)</option>
+        <option value="toon">🎨 Cartoon / Hand-Painted</option>
+      </select>
+      <p class="muted">Podés repintar todo el modelo o una malla concreta. El modo
+        <b>Cartoon</b> da un look estilizado tipo videojuego (sombras suaves en bandas,
+        colores saturados, bordes iluminados).</p>
+    </div>
+
+    <div class="section">
+      <h2>Vista previa de mapas</h2>
+      <div id="preview-box">
+        <div class="thumb-wrap"><canvas id="thumb-albedo" width="128" height="128"></canvas><span>Color</span></div>
+        <div class="thumb-wrap"><canvas id="thumb-normal" width="128" height="128"></canvas><span>Normales</span></div>
+        <pre id="spec-json"></pre>
+      </div>
+      <p class="muted" id="preview-empty">Se mostrará acá cuando repintes.</p>
+    </div>
+
+    <div class="section">
+      <h2>Ajuste fino</h2>
+      <div class="slider"><label>Metalicidad <b id="metalness-val">0</b></label>
+        <input type="range" id="metalness" min="0" max="1" step="0.01" value="0" /></div>
+      <div class="slider"><label>Rugosidad <b id="roughness-val">0.5</b></label>
+        <input type="range" id="roughness" min="0" max="1" step="0.01" value="0.5" /></div>
+      <div class="slider"><label>Relieve (normales) <b id="normalScale-val">1</b></label>
+        <input type="range" id="normalScale" min="0" max="3" step="0.05" value="1" /></div>
+      <div class="slider"><label>Repetición / escala <b id="tiling-val">3</b></label>
+        <input type="range" id="tiling" min="0.5" max="10" step="0.5" value="3" /></div>
+    </div>
+
+    <div class="section">
+      <h2>4 · Exportar</h2>
+      <button class="btn" id="btn-download" disabled>⬇️ Descargar .glb</button>
+      <p class="muted">El .glb incluye las texturas incrustadas: se puede abrir en Blender, Unity o cualquier visor glTF.</p>
+      <div class="toggle-row" style="margin-top:12px">
+        <label><input type="checkbox" id="autorotate" /> Girar auto</label>
+        <label><input type="checkbox" id="toggle-grid" checked /> Rejilla</label>
+      </div>
+    </div>
+  </aside>
+
+  <main id="stage">
+    <canvas id="viewer"></canvas>
+    <div id="topbar"><a href="./index.html">⚔️ Ir al juego</a></div>
+    <div id="status">Iniciando visor…</div>
+  </main>
+
+  <div id="drop-hint"><div class="box">🎨 Soltá tu modelo 3D acá<small>.glb o .gltf</small></div></div>
+
+  <script type="importmap">
+    { "imports": { "three": "./lib/three.module.js?v=3" } }
+  </script>
+  <script type="module" src="./js/retexture.js?v=1"></script>
+</body>
+</html>

@@ -8,7 +8,7 @@
 <script>
   // Auto-actualización: si el servidor tiene una versión más nueva que esta
   // página (cacheada), recargar una vez con la versión nueva en la URL.
-  window.GAME_VERSION = 6;
+  window.GAME_VERSION = 7;
   fetch('./version.json?nc=' + Date.now(), { cache: 'no-store' })
     .then((r) => r.json())
     .then(({ v }) => {
@@ -212,6 +212,7 @@
       </div><br>
       <button class="btn" id="btn-start">▶ Jugar</button>
       <button class="btn alt" id="btn-chests-start">🧰 Mis cofres</button>
+      <a class="btn alt" href="./retexture.html" style="text-decoration:none">🎨 Retexturizador IA</a>
     </div>
   </div>
 
