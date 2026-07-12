@@ -57,6 +57,10 @@ scene.add(key);
 const fill = new THREE.DirectionalLight(0x88aaff, 0.5);
 fill.position.set(-5, 3, -3);
 scene.add(fill);
+// luz de borde (rim): ilumina el contorno, para el look cartoon "bordes iluminados"
+const rim = new THREE.DirectionalLight(0xfff0e0, 1.1);
+rim.position.set(-2, 4, -6);
+scene.add(rim);
 
 // Suelo receptor de sombras
 const ground = new THREE.Mesh(
@@ -81,6 +85,7 @@ const meshes = [];             // { mesh, name }
 const originalMaterials = new Map(); // mesh -> material original (para reset)
 const appliedMaterials = new Map();  // mesh -> material aplicado (para sliders)
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
+let lastPrompt = null;               // último prompt aplicado (para recalcular al cambiar estilo)
 
 function clearModel() {
   if (root) {
@@ -219,11 +224,13 @@ function applyPrompt() {
   const targets = targetMeshes();
   if (!targets.length) { setStatus('No hay malla seleccionada.', true); return; }
 
+  lastPrompt = prompt;
   setStatus('🎨 Generando texturas…');
+  const style = $('style').value;
   // deja pintar el frame de estado antes del trabajo pesado
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const t0 = performance.now();
-    const { material, spec, preview } = materialFromPrompt(prompt, maxAniso);
+    const { material, spec, preview } = materialFromPrompt(prompt, maxAniso, { style });
 
     for (const mesh of targets) {
       mesh.material = material;
@@ -273,15 +280,16 @@ function applySliders() {
   const nscale = +$('normalScale').value;
   const rep = Math.max(0.2, +$('tiling').value * 0.6);
   for (const [, m] of appliedMaterials) {
+    // metalicidad/rugosidad solo aplican a materiales PBR (no al toon)
     if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
       if (!m.isMeshPhysicalMaterial || !m.transmission) m.metalness = metal;
       m.roughness = m.roughnessMap ? Math.max(0.05, rough) : rough;
-      if (m.normalScale) m.normalScale.set(nscale, nscale);
-      for (const map of [m.map, m.normalMap, m.roughnessMap, m.emissiveMap]) {
-        if (map) { map.repeat.set(rep, rep); map.needsUpdate = true; }
-      }
-      m.needsUpdate = true;
     }
+    if (m.normalScale) m.normalScale.set(nscale, nscale);
+    for (const map of [m.map, m.normalMap, m.roughnessMap, m.emissiveMap]) {
+      if (map) { map.repeat.set(rep, rep); map.needsUpdate = true; }
+    }
+    m.needsUpdate = true;
   }
 }
 
@@ -319,8 +327,34 @@ function drawThumb(target, srcCanvas) {
 function downloadGLB() {
   if (!root) return;
   setStatus('📦 Exportando .glb…');
+
+  // El sombreado toon no existe en glTF (y su gradientMap DataTexture rompe el
+  // exportador). Cambiamos temporalmente los materiales toon por una
+  // aproximación PBR portable y los restauramos al terminar.
+  const swapped = [];
+  root.traverse((o) => {
+    if (o.isMesh && o.material && o.material.isMeshToonMaterial) {
+      const t = o.material;
+      const std = new THREE.MeshStandardMaterial({
+        map: t.map || null,
+        normalMap: t.normalMap || null,
+        color: 0xffffff,
+        roughness: 0.75,
+        metalness: 0.0,
+        emissive: t.emissive ? t.emissive.clone() : new THREE.Color(0),
+        emissiveMap: t.emissiveMap || null,
+        emissiveIntensity: t.emissiveIntensity || 1,
+      });
+      if (t.normalScale) std.normalScale.copy(t.normalScale);
+      swapped.push([o, t]);
+      o.material = std;
+    }
+  });
+  const restore = () => { for (const [o, t] of swapped) o.material = t; };
+
   const exporter = new GLTFExporter();
   exporter.parse(root, (result) => {
+    restore();
     const blob = new Blob([result], { type: 'model/gltf-binary' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -330,6 +364,7 @@ function downloadGLB() {
     setTimeout(() => URL.revokeObjectURL(url), 4000);
     setStatus('✅ Descargado modelo-retexturizado.glb (con texturas incrustadas).');
   }, (err) => {
+    restore();
     console.error(err);
     setStatus('❌ Error al exportar el .glb.', true);
   }, { binary: true, onlyVisible: true });
@@ -373,6 +408,9 @@ for (const slider of ['metalness', 'roughness', 'normalScale', 'tiling']) {
 
 $('autorotate').addEventListener('change', (e) => { controls.autoRotate = e.target.checked; });
 $('toggle-grid').addEventListener('change', (e) => { grid.visible = e.target.checked; });
+
+// al cambiar el estilo, si ya hay un prompt aplicado, se recalcula
+$('style').addEventListener('change', () => { if (lastPrompt) { $('prompt').value = lastPrompt; applyPrompt(); } });
 
 // chips de ejemplo
 document.querySelectorAll('.chip').forEach((chip) => {

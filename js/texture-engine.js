@@ -32,6 +32,11 @@ function shade(rgb, amount) {
   if (t >= 0) return mixRgb(rgb, { r: 255, g: 255, b: 255 }, t);
   return mixRgb(rgb, { r: 0, g: 0, b: 0 }, -t);
 }
+function saturate(rgb, f) {
+  // f > 1 aumenta la saturación (para el look cartoon hand-painted)
+  const g = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+  return { r: g + (rgb.r - g) * f, g: g + (rgb.g - g) * f, b: g + (rgb.b - g) * f };
+}
 
 // Diccionario de colores (es + en). El orden importa: frases más largas primero.
 const COLORS = [
@@ -452,6 +457,9 @@ function synthesize(spec) {
       height[i] = h;
       rough[i] = Math.max(0.02, Math.min(1, rgh));
 
+      // modo cartoon / hand-painted: sube saturación
+      if (spec.stylize) col = saturate(col, 1.3);
+
       const p = i * 4;
       ad[p] = col.r; ad[p + 1] = col.g; ad[p + 2] = col.b; ad[p + 3] = 255;
     }
@@ -520,22 +528,61 @@ function canvasToTexture(canvas, colorSpace, tiling) {
   return tex;
 }
 
+// Rampa de sombreado toon: pocas bandas => sombras suaves escalonadas
+// (el look hand-painted de Zelda/Clash/Overwatch estilizado).
+let _gradientMap = null;
+function makeGradientMap() {
+  if (_gradientMap) return _gradientMap;
+  const steps = [90, 150, 205, 255];
+  const data = new Uint8Array(steps.length * 4);
+  steps.forEach((s, i) => { data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = s; data[i * 4 + 3] = 255; });
+  const tex = new THREE.DataTexture(data, steps.length, 1, THREE.RGBAFormat);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.needsUpdate = true;
+  _gradientMap = tex;
+  return tex;
+}
+
 /**
  * Crea un material Three.js a partir de un prompt.
  * @param {string} prompt
  * @param {number} maxAnisotropy - renderer.capabilities.getMaxAnisotropy()
  * @returns {{ material: THREE.Material, spec: object, preview: {albedo,normal} }}
  */
-export function materialFromPrompt(prompt, maxAnisotropy = 8) {
+export function materialFromPrompt(prompt, maxAnisotropy = 8, opts = {}) {
+  const style = opts.style || 'pbr';
   const spec = interpretPrompt(prompt);
+  spec.stylize = style === 'toon';
   const maps = synthesize(spec);
   const rep = Math.max(1, spec.tiling * 0.6);
+
+  const albedoTex = canvasToTexture(maps.albedo, THREE.SRGBColorSpace, rep);
+  albedoTex.anisotropy = maxAnisotropy;
+
+  // ---- modo cartoon / hand-painted (MeshToonMaterial) ----
+  if (style === 'toon') {
+    const mat = new THREE.MeshToonMaterial();
+    mat.map = albedoTex;
+    mat.gradientMap = makeGradientMap();
+    mat.normalMap = canvasToTexture(maps.normal, THREE.NoColorSpace, rep);
+    mat.normalScale = new THREE.Vector2(0.6, 0.6); // relieve sutil, look pintado
+    mat.color = new THREE.Color(0xffffff);
+    if (maps.emissiveCanvas) {
+      mat.emissive = new THREE.Color(0xffffff);
+      mat.emissiveMap = canvasToTexture(maps.emissiveCanvas, THREE.SRGBColorSpace, rep);
+      mat.emissiveIntensity = spec.emissiveIntensity;
+    } else if (spec.emissive && spec.emissiveIntensity > 0) {
+      mat.emissive = new THREE.Color(spec.emissive);
+      mat.emissiveIntensity = spec.emissiveIntensity * 0.5;
+    }
+    mat.needsUpdate = true;
+    return { material: mat, spec, preview: { albedo: maps.albedo, normal: maps.normal } };
+  }
 
   const isPhysical = spec.transmission > 0;
   const mat = isPhysical ? new THREE.MeshPhysicalMaterial() : new THREE.MeshStandardMaterial();
 
-  const albedoTex = canvasToTexture(maps.albedo, THREE.SRGBColorSpace, rep);
-  albedoTex.anisotropy = maxAnisotropy;
   mat.map = albedoTex;
   mat.normalMap = canvasToTexture(maps.normal, THREE.NoColorSpace, rep);
   mat.normalScale = new THREE.Vector2(1, 1);
