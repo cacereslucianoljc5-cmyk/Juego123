@@ -119,11 +119,41 @@ function frameModel(object) {
   controls.update();
 }
 
+// Muchos modelos generados por IA (Hunyuan, etc.) o escaneos vienen como malla
+// "cruda": solo POSITION, sin normales (se ven negros) y sin UVs (las texturas
+// no se pueden mapear). Los generamos al vuelo para que sean retexturizables.
+function ensureNormalsAndUVs(geometry) {
+  if (!geometry || !geometry.attributes.position) return;
+  if (!geometry.attributes.normal) geometry.computeVertexNormals();
+  if (!geometry.attributes.uv) {
+    geometry.computeBoundingBox();
+    const bb = geometry.boundingBox;
+    const sx = bb.max.x - bb.min.x, sy = bb.max.y - bb.min.y, sz = bb.max.z - bb.min.z;
+    const inv = 1 / (Math.max(sx, sy, sz) || 1);
+    const pos = geometry.attributes.position;
+    const nor = geometry.attributes.normal;
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      const x = (pos.getX(i) - bb.min.x) * inv;
+      const y = (pos.getY(i) - bb.min.y) * inv;
+      const z = (pos.getZ(i) - bb.min.z) * inv;
+      const nx = Math.abs(nor.getX(i)), ny = Math.abs(nor.getY(i)), nz = Math.abs(nor.getZ(i));
+      let u, v;
+      if (nx >= ny && nx >= nz) { u = z; v = y; }        // cara mirando en X -> proyecta YZ
+      else if (ny >= nx && ny >= nz) { u = x; v = z; }   // cara mirando en Y -> proyecta XZ
+      else { u = x; v = y; }                              // cara mirando en Z -> proyecta XY
+      uv[i * 2] = u; uv[i * 2 + 1] = v;
+    }
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  }
+}
+
 function registerMeshes() {
   const sel = $('mesh-target');
   sel.innerHTML = '<option value="all">🎯 Todo el modelo</option>';
   root.traverse((o) => {
     if (o.isMesh) {
+      ensureNormalsAndUVs(o.geometry);
       o.castShadow = true;
       o.receiveShadow = true;
       const name = o.name || `parte ${meshes.length + 1}`;
