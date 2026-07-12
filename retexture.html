@@ -148,7 +148,10 @@
       <div class="btn-row">
         <button class="btn alt small" id="btn-upload">⬆️ Subir .glb / .gltf</button>
       </div>
-      <input type="file" id="file-input" accept=".glb,.gltf,model/gltf-binary" hidden />
+      <!-- sin filtro accept: en Android los .glb se reportan como
+           application/octet-stream y el selector los atenúa. Validamos el
+           nombre en JS. -->
+      <input type="file" id="file-input" hidden />
       <p class="muted">O arrastrá el archivo a la ventana. Se carga un modelo de ejemplo para empezar.
         Mallas detectadas: <b id="mesh-count">0</b>.</p>
     </div>
